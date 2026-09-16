@@ -1,0 +1,4 @@
+{"classification": "likely_security", "label": "可能构成证券", "label_en": "Likely Security", "emoji": "🔴", "risk": "high", "description": "Howey 四要素中至少三项为 strong，或呈明显投资合同特征；在采用 Howey 标准的法域（如美国）被认定为证券的概率高。"}
+{"classification": "possibly_security", "label": "可能构成证券（存争议）", "label_en": "Possibly Security", "emoji": "🟡", "risk": "medium", "description": "四要素呈现混合信号（如两强两弱、或存在关键争议点），需结合发行方式、营销话术、实际治理等完整事实进一步判断。"}
+{"classification": "likely_not_security", "label": "大概率不构成证券", "label_en": "Likely Not Security", "emoji": "🟢", "risk": "low", "description": "多数 Howey 要素为 absent，代币呈现较强功能/实用属性，被认定为投资合同的概率较低。"}
+{"classification": "insufficient_info", "label": "信息不足无法判定", "label_en": "Insufficient Information", "emoji": "⚪", "risk": "unknown", "description": "输入信息中 unknown 要素过多，无法形成可靠定性；本工具不臆测结论。"}

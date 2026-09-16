@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "token-classifier"
+version = "0.1.0"
+description = "离线代币监管定性器：Howey 四要素 + 香港 SFC / 新加坡 MAS 多法域分析线索"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+keywords = ["legal-tech", "web3", "token", "compliance", "howey-test", "sec", "sfc", "mas"]
+
+[project.scripts]
+token-classifier = "token_classifier.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["token_classifier*"]
