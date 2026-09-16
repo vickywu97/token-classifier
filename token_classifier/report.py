@@ -4,6 +4,7 @@
 「工具层 + 数据层」双重免责声明。
 """
 import json
+import re
 from datetime import datetime, timezone
 
 from .classifier import JURISDICTION_LABELS
@@ -33,6 +34,51 @@ DATA_DISCLAIMER = (
     "可能滞后于最新执法动态与监管指引，请以各监管机构官方最新发布为准。"
 )
 
+# 「购买」类词本身可能只是消费（为使用服务而购买），而非投资。
+# 当投资资金要素判 strong 且命中的是这类消费型购买词时，追加争议提示。
+CONSUMPTION_AMBIGUOUS = {"购买", "purchase", "buy", "兑换", "swap"}
+
+SUFFICIENCY_NOTE = {
+    "full": "full = 四要素均具备判定所需信息（无 unknown），可形成明确分级。",
+    "partial": "partial = 有 1–2 个要素信息不足（unknown），结论为倾向性，需补充事实。",
+    "none": "none = 3 个及以上要素信息不足，无法形成有效判定（insufficient_info）。",
+}
+
+
+def _clean_evidence(ev, max_len=120):
+    """证据片段净化：压缩空白（含换行）、转义表格分隔符、限长。"""
+    if not ev:
+        return ev
+    ev = " ".join(ev.split())
+    ev = ev.replace("|", "\\|")
+    if len(ev) > max_len:
+        ev = ev[:max_len].rstrip() + "…"
+    return ev
+
+
+def summarize(text, max_len=200):
+    """从机制描述中抽取 2–3 句背景摘要，置于报告开头。"""
+    paras = [p.strip() for p in re.split(r"\n+", text)
+             if p.strip() and not p.strip().startswith("#")]
+    if not paras:
+        paras = [p.strip() for p in text.split("\n") if p.strip()]
+    joined = " ".join(paras[:2])
+    joined = " ".join(joined.split())
+    if len(joined) > max_len:
+        joined = joined[:max_len].rstrip() + "…"
+    return joined
+
+
+def _factor_dispute(r):
+    """投资资金要素判 strong 且命中消费型购买词时，返回争议提示文本。"""
+    note = r.get("dispute_note", "")
+    if not note or r["state"] != "strong":
+        return ""
+    if any(m.get("weight") == "strong" and m["pattern"] in CONSUMPTION_AMBIGUOUS
+           for m in r.get("matched", [])):
+        return note
+    return ""
+
 
 def _type_meta(libs, classification):
     for t in libs.get("token_types", []):
@@ -43,13 +89,19 @@ def _type_meta(libs, classification):
 
 def _factor_row(r):
     if r["matched"]:
-        ev = "；".join(f"命中「{m['pattern']}」：{m['evidence']}" for m in r["matched"][:2])
+        ev = "；".join(
+            f"命中「{m['pattern']}」：{_clean_evidence(m['evidence'])}"
+            for m in r["matched"][:2]
+        )
     else:
         ev = "（未从输入中检得明确证据）"
+    disp = _factor_dispute(r)
+    if disp:
+        ev = ev + " ⚠️ 争议：" + disp
     return f"| {r['name']}（{r['name_en']}） | {FACTOR_EMOJI[r['state']]} | {ev} |"
 
 
-def build_markdown(token_name, analysis, libs, jurisdictions):
+def build_markdown(token_name, analysis, libs, jurisdictions, summary=None):
     howey = analysis["howey_summary"]
     meta = _type_meta(libs, howey["classification"])
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -61,10 +113,15 @@ def build_markdown(token_name, analysis, libs, jurisdictions):
     lines.append(f"**分析时间**：{now}")
     lines.append(f"**适用法域**：{jnames}\n")
 
+    if summary:
+        lines.append("## 代币机制摘要\n")
+        lines.append(summary + "\n")
+
     lines.append("## 综合定性（Howey 视角）\n")
     lines.append(f"{meta.get('emoji','')} **{meta.get('label','')}** （{meta.get('label_en','')}）\n")
     lines.append(f"- 置信度：{howey['confidence']}")
     lines.append(f"- 依据充分性：{howey['evidence_sufficiency']}")
+    lines.append(f"- 依据充分性说明：{SUFFICIENCY_NOTE.get(howey['evidence_sufficiency'], '')}")
     lines.append(f"- 要素统计：strong {howey['counts']['strong']} / weak {howey['counts']['weak']} / absent {howey['counts']['absent']} / unknown {howey['counts']['unknown']}")
     lines.append(f"- 说明：{meta.get('description','')}\n")
 
@@ -83,7 +140,10 @@ def build_markdown(token_name, analysis, libs, jurisdictions):
         lines.append(f"**判定**：{VERDICT_LABELS.get(jr['verdict'], jr['verdict'])}\n")
         if jr["hits"]:
             for h in jr["hits"]:
-                ev = "；".join(f"「{m['pattern']}」：{m['evidence']}" for m in h["matched"][:1])
+                ev = "；".join(
+                    f"「{m['pattern']}」：{_clean_evidence(m['evidence'])}"
+                    for m in h["matched"][:1]
+                )
                 lines.append(f"- **{h['topic']}**（{h['framework']}）：命中 {ev}")
                 if h.get("notes"):
                     lines.append(f"  - 备注：{h['notes']}")
@@ -101,13 +161,14 @@ def build_markdown(token_name, analysis, libs, jurisdictions):
     return "\n".join(lines)
 
 
-def build_json(token_name, analysis, libs, jurisdictions):
+def build_json(token_name, analysis, libs, jurisdictions, summary=None):
     howey = analysis["howey_summary"]
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     out = {
         "token_name": token_name,
         "analyzed_at": now,
         "jurisdictions": jurisdictions,
+        "summary": summary or "",
         "overall": {
             "classification": howey["classification"],
             "confidence": howey["confidence"],
@@ -121,6 +182,7 @@ def build_json(token_name, analysis, libs, jurisdictions):
                 "name_en": r["name_en"],
                 "state": r["state"],
                 "evidence": [m["evidence"] for m in r["matched"]],
+                "dispute_note": _factor_dispute(r),
             }
             for r in analysis["howey_factors"]
         ],

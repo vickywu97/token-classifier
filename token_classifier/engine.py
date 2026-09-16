@@ -35,6 +35,7 @@ def judge_factor(factor_entry, text):
         "question": factor_entry.get("question", ""),
         "state": state,
         "matched": matched,
+        "dispute_note": factor_entry.get("dispute_note", ""),
     }
 
 

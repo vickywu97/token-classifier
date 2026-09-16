@@ -39,18 +39,35 @@ def split_paragraphs(text):
     return parts
 
 
-def find_evidence(text, pattern, window=45):
-    """在文本中定位 pattern，返回带上下文的证据片段；未命中返回 None。"""
-    idx = text.find(pattern)
+def find_evidence(text, pattern, window=20):
+    """在文本中定位 pattern，返回带上下文的证据片段；未命中返回 None。
+
+    改进点（v1.1，修复报告渲染 bug）：
+    - 优先在「非 Markdown 标题」的段落中定位，避免把标题（如「发行与认购」）
+      误当作证据片段来源；
+    - 返回前将内部空白（含换行）压缩为单个空格，避免破坏 Markdown 表格渲染；
+    - 片段长度由 window 控制（命中词前后各约 window 字），避免整段原文。
+    """
+    paragraphs = [p.strip() for p in re.split(r"\n+", text) if p.strip()]
+    # 优先选择非标题段落（标题以 # 开头）
+    candidates = [p for p in paragraphs if pattern in p and not p.startswith("#")]
+    target = candidates[0] if candidates else next(
+        (p for p in paragraphs if pattern in p), None
+    )
+    if target is None:
+        return None
+    idx = target.find(pattern)
     if idx < 0:
         return None
     start = max(0, idx - window)
-    end = min(len(text), idx + len(pattern) + window)
-    snippet = text[start:end]
+    end = min(len(target), idx + len(pattern) + window)
+    snippet = target[start:end]
     if start > 0:
         snippet = "…" + snippet
-    if end < len(text):
+    if end < len(target):
         snippet = snippet + "…"
+    # 压缩内部空白（含换行）为单空格，防止破坏 Markdown 表格
+    snippet = " ".join(snippet.split())
     return snippet.strip()
 
 

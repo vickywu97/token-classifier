@@ -10,7 +10,7 @@ import sys
 
 from .extractor import load_libraries
 from .classifier import analyze
-from .report import build_markdown, build_json
+from .report import build_markdown, build_json, summarize
 
 VALID_JURISDICTIONS = ["HK_SFC", "SG_MAS"]
 
@@ -45,10 +45,11 @@ def main(argv=None):
     libs = load_libraries()
     analysis = analyze(text, libs, args.jurisdictions)
 
+    summary = summarize(text)
     if args.format == "json":
-        report = build_json(args.token_name, analysis, libs, args.jurisdictions)
+        report = build_json(args.token_name, analysis, libs, args.jurisdictions, summary=summary)
     else:
-        report = build_markdown(args.token_name, analysis, libs, args.jurisdictions)
+        report = build_markdown(args.token_name, analysis, libs, args.jurisdictions, summary=summary)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
