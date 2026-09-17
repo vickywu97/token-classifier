@@ -12,7 +12,7 @@ from .extractor import load_libraries
 from .classifier import analyze
 from .report import build_markdown, build_json, summarize
 
-VALID_JURISDICTIONS = ["HK_SFC", "SG_MAS"]
+VALID_JURISDICTIONS = ["HK_SFC", "SG_MAS", "US_SEC", "EU_MICA"]
 
 
 def main(argv=None):

@@ -18,10 +18,15 @@ FACTOR_EMOJI = {
 
 VERDICT_LABELS = {
     "likely_security": "🔴 可能构成证券（受证券法规管）",
+    "possibly_security": "🟡 可能构成证券（Howey 混合信号，SEC 可能认定为投资合同）",
+    "likely_not_security": "🟢 大概率不构成证券（Howey 要素多为 absent，SEC 认定为投资合同概率低）",
     "mixed": "🟡 混合信号（兼具证券与实用特征，需进一步事实判断）",
     "payment_token": "🟢 倾向数字支付代币（受支付/服务法规管）",
     "utility_token": "🟢 倾向实用/功能型代币（通常不适用证券法）",
     "regulated_activity": "🟡 涉及受规管活动（如交易所/托管须持牌）",
+    "security_token_outside_miCA": "🔴 倾向证券型代币（属 MiFID II 金融工具，不在 MiCA 范围，适用证券监管）",
+    "e_money_token": "🟡 倾向电子货币代币 EMT（MiCA 下须获 EMT 发行人授权）",
+    "asset_referenced_token": "🟡 倾向资产参考代币 ART（MiCA 下须获 ART 发行人授权）",
     "insufficient_info": "⚪ 信息不足无法判定",
 }
 

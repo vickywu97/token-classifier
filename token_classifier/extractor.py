@@ -26,6 +26,8 @@ def load_libraries(data_dir=DATA_DIR):
         "howey": load_jsonl(os.path.join(data_dir, "howey_factors.jsonl")),
         "hk_sfc": load_jsonl(os.path.join(data_dir, "jurisdictions", "hk_sfc.jsonl")),
         "sg_mas": load_jsonl(os.path.join(data_dir, "jurisdictions", "sg_mas.jsonl")),
+        "us_sec": load_jsonl(os.path.join(data_dir, "jurisdictions", "us_sec.jsonl")),
+        "eu_mica": load_jsonl(os.path.join(data_dir, "jurisdictions", "eu_mica.jsonl")),
         "token_types": load_jsonl(os.path.join(data_dir, "token_types.jsonl")),
     }
 

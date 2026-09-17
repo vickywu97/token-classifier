@@ -30,6 +30,9 @@ python -m token_classifier --text "用户以 ETH 认购，承诺年化 15% 分�
 
 # 只看某一法域
 python -m token_classifier -f demo/demo_utility_token.md -j HK_SFC
+
+# 指定多法域（默认港 + 新 + 美 SEC + 欧 MiCA）
+python -m token_classifier -f demo/demo_security_token.md -j HK_SFC SG_MAS US_SEC EU_MICA
 ```
 
 依赖：**Python 3.8+，标准库，零第三方依赖**。
@@ -54,7 +57,7 @@ python -m token_classifier -f demo/demo_utility_token.md -j HK_SFC
 | `likely_not_security` 🟢 | 多数要素 absent |
 | `insufficient_info` ⚪ | unknown 过多 |
 
-多法域（香港 SFC / 新加坡 MAS）**分别判定**，不做统一全球结论。
+多法域（香港 SFC / 新加坡 MAS / 美国 SEC / 欧盟 MiCA）**分别判定**，不做统一全球结论。
 
 ---
 
@@ -65,6 +68,8 @@ python -m token_classifier -f demo/demo_utility_token.md -j HK_SFC
 | `data/howey_factors.jsonl` | Howey 四要素，含双语指标 + 权重 + SEC 框架来源 |
 | `data/jurisdictions/hk_sfc.jsonl` | 香港 SFC：SFO 证券定义 / VASP 发牌 / 实用型除外 |
 | `data/jurisdictions/sg_mas.jsonl` | 新加坡 MAS：PSA 数字支付代币 / SFA 证券型 / 实用型除外 |
+| `data/jurisdictions/us_sec.jsonl` | 美国 SEC：采用 Howey 测试（与综合定性同源），输出证券/非证券倾向与注册制度提示 |
+| `data/jurisdictions/eu_mica.jsonl` | 欧盟 MiCA：加密资产四分类（证券型→MiFID II / EMT / ART / 实用型） |
 | `data/token_types.jsonl` | 四级定性定义（emoji + 风险等级） |
 
 每条记录附 `source_url` 与 `source_accessed_at`。监管框架基于公开信息整理，可能滞后，请以监管机构官方最新发布为准。

@@ -30,6 +30,9 @@ python -m token_classifier --text "Users subscribe in ETH, promising 15% annual 
 
 # Only one jurisdiction
 python -m token_classifier -f demo/demo_utility_token.md -j HK_SFC
+
+# Multiple jurisdictions (default: HK + SG + US SEC + EU MiCA)
+python -m token_classifier -f demo/demo_security_token.md -j HK_SFC SG_MAS US_SEC EU_MICA
 ```
 
 Dependencies: **Python 3.8+, standard library, zero third-party dependencies**.
@@ -65,6 +68,8 @@ Multiple jurisdictions (Hong Kong SFC / Singapore MAS) are **judged separately**
 | `data/howey_factors.jsonl` | Howey four factors, bilingual indicators + weights + SEC framework source |
 | `data/jurisdictions/hk_sfc.jsonl` | Hong Kong SFC: SFO security definition / VASP licensing / utility exclusion |
 | `data/jurisdictions/sg_mas.jsonl` | Singapore MAS: PSA digital payment token / SFA security-type / utility exclusion |
+| `data/jurisdictions/us_sec.jsonl` | US SEC: applies the Howey test (same source as the composite classification); outputs security/non-security tendency + registration-regime notes |
+| `data/jurisdictions/eu_mica.jsonl` | EU MiCA: crypto-asset four-way classification (security-type→MiFID II / EMT / ART / utility) |
 | `data/token_types.jsonl` | four-level classification definitions (emoji + risk level) |
 
 Each record carries `source_url` and `source_accessed_at`. Regulatory frameworks are compiled from public information and may lag — always defer to the latest official regulator publications.
