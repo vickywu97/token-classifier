@@ -9,6 +9,7 @@ description = "离线代币监管定性器：Howey 四要素 + 香港 SFC / 新�
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
+authors = [{ name = "Vicky Wu", email = "vickywu97@163.com" }]
 keywords = ["legal-tech", "web3", "token", "compliance", "howey-test", "sec", "sfc", "mas"]
 
 [project.scripts]

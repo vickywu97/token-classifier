@@ -81,6 +81,13 @@ python -m token_classifier -f demo/demo_security_token.md -o report.md     # Mar
 python -m token_classifier -f demo/demo_security_token.md --format json     # JSON
 ```
 
+CI 门禁：当综合定性达到证券风险级别时以非零码退出，可直接接入流水线：
+
+```bash
+# 若定性为 possibly_security 或 likely_security，则 exit 1
+python -m token_classifier -f demo/demo_security_token.md --fail-on possibly_security
+```
+
 ---
 
 ## 测试

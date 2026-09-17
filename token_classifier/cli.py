@@ -31,6 +31,8 @@ def main(argv=None):
     )
     parser.add_argument("--format", choices=["md", "json"], default="md", help="输出格式")
     parser.add_argument("--output", "-o", help="输出到文件（不指定则打印到 stdout）")
+    parser.add_argument("--fail-on", choices=["likely_security", "possibly_security"], default=None,
+                        help="CI 门禁：若综合定性达到该级别（或更高），以非零码退出")
     args = parser.parse_args(argv)
 
     if args.file:
@@ -57,6 +59,15 @@ def main(argv=None):
         print(f"报告已写入：{args.output}", file=sys.stderr)
     else:
         print(report)
+
+    if args.fail_on:
+        order = {"likely_not_security": 0, "insufficient_info": 1,
+                 "possibly_security": 2, "likely_security": 3}
+        cls = analysis["howey_summary"]["classification"]
+        if order.get(cls, 0) >= order[args.fail_on]:
+            print(f"❌ CI 门禁未通过：综合定性为 {cls}，达到或超过 --fail-on={args.fail_on}",
+                  file=sys.stderr)
+            return 1
     return 0
 
 
