@@ -1,7 +1,7 @@
 # 代币监管定性分析报告
 
-**代币名称**：StoragePay Token（SPT）
-**分析时间**：2026-09-17 06:11 UTC
+**代币名称**：PayUtility Token
+**分析时间**：2026-09-18 06:06 UTC
 **适用法域**：香港 SFC + 新加坡 MAS + 美国 SEC + 欧盟 MiCA
 
 ## 代币机制摘要
@@ -12,10 +12,10 @@ SPT 为平台功能型代币，用户可免费获取该代币，不要求支付�
 
 🟢 **大概率不构成证券** （Likely Not Security）
 
-- 置信度：high
-- 依据充分性：full
-- 依据充分性说明：full = 四要素均具备判定所需信息（无 unknown），可形成明确分级。
-- 要素统计：strong 0 / weak 0 / absent 4 / unknown 0
+- 置信度：medium
+- 依据充分性：partial
+- 依据充分性说明：partial = 有 1–2 个要素信息不足（unknown），结论为倾向性，需补充事实。
+- 要素统计：strong 0 / weak 0 / absent 3 / unknown 1
 - 说明：多数 Howey 要素为 absent，代币呈现较强功能/实用属性，被认定为投资合同的概率较低。
 
 ## Howey Test 四要素分析
@@ -23,7 +23,7 @@ SPT 为平台功能型代币，用户可免费获取该代币，不要求支付�
 | 要素 | 判定 | 证据 |
 |------|------|------|
 | 投资资金（Investment of Money） | 🟢 absent | 命中「免费」：SPT 为平台功能型代币，用户可免费获取该代币，不要求支付任何对价。 |
-| 共同企业（Common Enterprise） | 🟢 absent | 命中「独立使用」：…智能合约自动运行，无需任何团队维护。用户独立使用代币获取服务。 |
+| 共同企业（Common Enterprise） | ⚪ unknown | 命中「独立使用」：…智能合约自动运行，无需任何团队维护。用户独立使用代币获取服务。 |
 | 利润预期（Expectation of Profits） | 🟢 absent | 命中「仅用于支付」：SPT 仅用于支付平台内的存储服务费，并作为访问高级功能的… |
 | 依赖他人努力（Efforts of Others） | 🟢 absent | 命中「完全去中心化」：StoragePay 协议完全去中心化、自执行，由智能合约自动运行，无需任何团…；命中「自执行」：StoragePay 协议完全去中心化、自执行，由智能合约自动运行，无需任何团队维护。… |
 

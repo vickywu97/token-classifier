@@ -15,15 +15,19 @@ def judge_factor(factor_entry, text):
     避免「既购买了又空投」这类混合文本被错误判为 absent。
     """
     matched = scan_indicators(text, factor_entry.get("indicators", []))
-    has_strong = any(m["weight"] == "strong" for m in matched)
-    has_weak = any(m["weight"] == "weak" for m in matched)
-    has_absent = any(m["weight"] == "absent" for m in matched)
+    # 否定语境命中的 strong/weak 不计入正面证据，仅负向（被明示否定的要素视为 absent）
+    pos = [m for m in matched if not m.get("negated")]
+    neg = [m for m in matched if m.get("negated")]
+    has_strong = any(m["weight"] == "strong" for m in pos)
+    has_weak = any(m["weight"] == "weak" for m in pos)
+    has_absent = any(m["weight"] == "absent" for m in pos)
+    has_negated_strong_weak = any(m["weight"] in ("strong", "weak") for m in neg)
 
     if has_strong:
         state = "strong"
     elif has_weak:
         state = "weak"
-    elif has_absent:
+    elif has_negated_strong_weak or has_absent:
         state = "absent"
     else:
         state = "unknown"

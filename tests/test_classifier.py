@@ -120,5 +120,40 @@ class TestAnalyzeJurisdictions(unittest.TestCase):
         self.assertEqual(res["jurisdictions"]["EU_MICA"]["verdict"], "utility_token")
 
 
+class TestAccuracyHardening(unittest.TestCase):
+    """回归测试：否定语境与英文大小写覆盖，防止误判证券。"""
+
+    def test_negation_explicit_no_security(self):
+        libs = load_libraries()
+        text = ("本代币仅用于支付平台服务费。无收益承诺，不构成投资，"
+                "不用于投资收益，发行方不保证任何回报。团队仅做基础运维。")
+        res = analyze(text, libs)
+        # 投资资金 / 利润预期 均被否定 → absent
+        fac = {f["factor"]: f["state"] for f in res["howey_factors"]}
+        self.assertEqual(fac["investment_of_money"], "absent")
+        self.assertEqual(fac["expectation_of_profits"], "absent")
+        self.assertEqual(res["howey_summary"]["classification"], "likely_not_security")
+        self.assertEqual(res["jurisdictions"]["US_SEC"]["verdict"], "likely_not_security")
+
+    def test_english_lowercase_matches(self):
+        libs = load_libraries()
+        text = "Investors purchase tokens. The Company will develop the ecosystem and investors expect profits."
+        res = analyze(text, libs)
+        fac = {f["factor"]: f["state"] for f in res["howey_factors"]}
+        # purchase / invest 此前因大小写漏判，现已命中
+        self.assertIn(fac["investment_of_money"], ("strong", "weak"))
+        # 英文不应被否定语境误伤
+        matched = [m for f in res["howey_factors"] for m in f["matched"]]
+        self.assertFalse(any(m.get("negated") for m in matched))
+
+    def test_negation_flag_attached(self):
+        libs = load_libraries()
+        text = "无收益承诺，不构成投资"
+        res = analyze(text, libs)
+        matched = [m for f in res["howey_factors"] for m in f["matched"]]
+        negated = [m for m in matched if m.get("negated")]
+        self.assertTrue(any(m["pattern"] in ("收益", "投资") for m in negated))
+
+
 if __name__ == "__main__":
     unittest.main()
