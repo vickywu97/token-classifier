@@ -102,7 +102,7 @@ Coverage: fact-library loading, evidence extraction, four-state judgment, Howey 
 
 - **This tool's output is automated analysis leads, not legal advice.** Final classification must be made by a licensed attorney combining complete facts (issuance method, marketing language, governance structure, actual use, secondary-market arrangements, etc.).
 - **Regulatory frameworks are compiled from public information**, with verification dates, and may lag the latest enforcement dynamics and regulatory guidance — always defer to official regulator publications.
-- MVP focuses on **Hong Kong SFC + Singapore MAS**; U.S. SEC (Howey case law) and EU MiCA are future extensions.
+- **Hong Kong SFC + Singapore MAS + U.S. SEC (5 Howey-framework characteristics, us_sec.jsonl) + EU MiCA (four-way classification)** are already implemented as default jurisdictions; the full SEC enforcement case-law library (SEC v. Ripple / Telegram, etc.) is a Phase 2 extension.
 - The fact library is AI-curated + preliminarily checked, not yet verified item-by-item by a named attorney; if used in practice, complete the verification ledger first.
 
 ---

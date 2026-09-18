@@ -109,7 +109,7 @@ python -m unittest discover -s tests
 
 - **本工具输出为自动化分析线索，不构成法律意见。** 最终定性须由执业律师结合完整事实（发行方式、营销话术、治理结构、实际用途、二级市场安排等）判断。
 - **监管框架基于公开信息整理**，附核验日期，可能滞后于最新执法动态与监管指引，请以各监管机构官方最新发布为准。
-- MVP 聚焦**香港 SFC + 新加坡 MAS**；美国 SEC（Howey 判例库）与 EU MiCA 为后续扩展方向。
+- 已实现 **香港 SFC + 新加坡 MAS + 美国 SEC（Howey 框架特征 5 条，us_sec.jsonl）+ 欧盟 MiCA（四类划分）** 四法域默认判定；完整 SEC 执法判例库（SEC v. Ripple / Telegram 等 litigation releases）为 Phase 2 扩展方向。
 - 事实库为 AI 策展 + 初步核对，尚未逐条经执业律师具名核验；如用于实务，请先完成核验台账。
 
 ---
