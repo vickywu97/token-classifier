@@ -75,9 +75,15 @@ def summarize(text, max_len=200):
 
 
 def _factor_dispute(r):
-    """投资资金要素判 strong 且命中消费型购买词时，返回争议提示文本。"""
+    """投资资金要素判 strong 且命中消费型购买词时，返回争议提示文本。
+
+    若已标注「双重语境」（消费+投资反证并存），改由 annotations 单独标注，
+    此处不再重复输出泛化争议提示，避免与双重语境说明冲突。
+    """
     note = r.get("dispute_note", "")
     if not note or r["state"] != "strong":
+        return ""
+    if any(m.get("dual_context") for m in r.get("matched", [])):
         return ""
     if any(m.get("weight") == "strong" and m["pattern"] in CONSUMPTION_AMBIGUOUS
            for m in r.get("matched", [])):
@@ -103,6 +109,8 @@ def _factor_row(r):
     disp = _factor_dispute(r)
     if disp:
         ev = ev + " ⚠️ 争议：" + disp
+    for ann in r.get("annotations", []):
+        ev = ev + " ⚠️ " + ann
     return f"| {r['name']}（{r['name_en']}） | {FACTOR_EMOJI[r['state']]} | {ev} |"
 
 
@@ -187,6 +195,7 @@ def build_json(token_name, analysis, libs, jurisdictions, summary=None):
                 "name_en": r["name_en"],
                 "state": r["state"],
                 "evidence": [m["evidence"] for m in r["matched"]],
+                "annotations": r.get("annotations", []),
                 "dispute_note": _factor_dispute(r),
             }
             for r in analysis["howey_factors"]
