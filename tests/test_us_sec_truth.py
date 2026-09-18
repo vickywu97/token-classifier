@@ -59,6 +59,17 @@ class TestUSSECTruthCases(unittest.TestCase):
         a = analyze(text, self.libs)
         self.assertEqual(a["howey_summary"]["classification"], "likely_not_security")
 
+    def test_future_dividend_not_falsely_negated(self):
+        """精度回归：『未来上线后按持有比例分红』中的『未来』不应触发否定，利润预期要素须命中（strong）。"""
+        text = (
+            "投资者出资认购项目代币。该项目处于测试网阶段，主网尚未上线，"
+            "募集资金将全部用于建设主网。团队承诺未来上线后按持有比例向持有者分红。"
+        )
+        a = analyze(text, self.libs)
+        states = {f["factor"]: f["state"] for f in a["howey_factors"]}
+        # 关键断言：『未来分红』不得因「未」被误判为 absent
+        self.assertEqual(states["expectation_of_profits"], "strong")
+
 
 if __name__ == "__main__":
     unittest.main()

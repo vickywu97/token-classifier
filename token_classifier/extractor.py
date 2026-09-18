@@ -46,6 +46,9 @@ NEGATION_MARKERS_CN = [
     "不", "无", "没有", "未", "非", "并非", "不构成", "不提供", "不保证", "不用于",
     "不代表", "不视为", "不存在", "免", "禁止", "不会", "不得", "不承诺", "不向",
 ]
+# 「未」为前缀型否定标记，但「未来 / 未知 / 未必 / 未遂 / 未免 / 未婚」等复合词
+# 并非否认，须排除，否则「未来分红」会被误判为否定语境。
+_NEG_AFTER_EXCLUDES = {"未": set("来知必遂免婚")}
 # 英文否定标记采用词边界正则，避免 "no" 误命中 "token" 之类。
 NEGATION_MARKERS_EN = [
     r"\bno\b", r"\bnot\b", r"\bwithout\b", r"\bnever\b", r"\bfree of\b",
@@ -77,11 +80,22 @@ def _ci_find(haystack, needle):
 
 
 def in_negation_context(text, match_start, window=16):
-    """判断 match_start 之前的 window 字内是否出现否定标记。"""
-    left = text[max(0, match_start - window): match_start]
+    """判断 match_start 之前的 window 字内是否出现否定标记。
+
+    对前缀型标记「未」做排除：其后紧跟排除字（未来/未知/未必/未遂/未免/未婚）时
+    不视为否定，避免「未来分红」类文本误杀利润要素。
+    """
+    start = max(0, match_start - window)
+    left = text[start: match_start]
     for m in NEGATION_MARKERS_CN:
-        if m in left:
-            return True
+        idx = left.find(m)
+        if idx < 0:
+            continue
+        if m == "未":
+            nxt = text[start + idx + 1] if start + idx + 1 < len(text) else ""
+            if nxt in _NEG_AFTER_EXCLUDES["未"]:
+                continue
+        return True
     left_l = left.lower()
     for m in NEGATION_MARKERS_EN:
         if re.search(m, left_l):
