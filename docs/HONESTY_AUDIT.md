@@ -317,7 +317,104 @@ VERDICT = likely_not_security  (规则: strong+weak<=1)
 
 **限定（重要）**：句读重置只重置到句末标点（`。！？`），逗号（`，`）分隔的**同句跨小句**否定不会释放（第 4 例 `不提供分红，用户独立使用代币。` 中 `独立使用` 仍被前小句 `不` 误吞）。要覆盖此类需额外在 `，`、`、` 处重置。架构修复（absent 跳过）对 absent 指标覆盖更完整（含逗号场景），故**架构修复仍为主、窗口修复为辅**的排序不变；窗口修复主攻强/弱指标的跨句误吞且已验证安全。
 
-## 审计方法学纪律（本轮四澄清沉淀）
+## 模块 B：dual_context 覆盖度与消费降级审计
+
+> 审计对象：`engine.py:30-50`（降级 / dual_context 逻辑）、`extractor.py:69-73`（`_ci_in` 匹配）、
+> `howey_factors.jsonl` 的 `investment_of_money` 配置（`purchase_indicators` / `consumption_context` / `investment_rebuttal`）。
+> 纪律：逐字打印输入；能力缺口只记录不修；判定分「真克制 / 能力缺口」；每例附代码路径引用。
+
+### B.1 三问题框架（经用户纠正后定稿）
+
+| 问题 | 纠正后定性 | 证据用例 | 性质 |
+|------|-----------|---------|------|
+| 1. `购买` 作 strong 是否过泛 | **是**：不限定对象词（代币/份额/权益），非投资购买误判 strong | B4（服务器硬件）、B6（纯购买）、B8（购买+分红） | 指标过泛 |
+| 2. dual_context 是否真双语境 | **触发过窄（词表锁定）**，非过宽误标：仅 `purchase_set={购买,buy,purchase}` + 消费词 + 反证词 三条件齐备才标 | B3（认购不标 dual，字面正确非漏报）、B3b（购买标 dual） | 触发词表锁定 |
+| 3. consumption 降级是否过宽 | **不过宽，但范围过窄**（对称问题2）：对「购买类」正确降级，且仅绑定 purchase_set | B2（正确降 weak）、B7（无误伤） | 范围过窄 |
+
+**dup_context 真实定义（从 `engine.py:36-50` 逐行读出）**：
+```python
+if m["weight"]=="strong" and m["pattern"].lower() in purchase_set:  # purchase_set={购买,buy,purchase}
+    if cons_hit and not rebut_hit:
+        m["weight"]="weak"; m["downgraded"]=True          # 纯消费 → 降级
+    elif cons_hit and rebut_hit:
+        m["dual_context"]=True                            # 消费+投资反证 → 双语境标柱
+```
+即 dual_context 语义确实是「购买行为兼具消费支付与投资收益双重性质」，但**触发被词表锁定在 `purchase_set`**——`认购/投资/出资` 在完全相同的双语境里**不标柱**。
+
+### B.2 问题 4：consumption_context 子串匹配系统性缺陷（强化1 完整枚举）
+
+**机制确认**（`extractor.py:69-73`）：`_ci_in` 对中文做 `needle in haystack` 精确子串匹配、英文大小写不敏感 `in`——**全无词边界**。`consumption_context` 实值（7 词）：
+`['支付','服务费','手续费','使用费','消费','购买服务','兑换服务']`。其中 `购买服务` 是 `购买`(purchase_set)+`服务` 的拼接词。
+
+**7 词完整碰撞枚举（每词构造「购买 + 碰撞短语」，验证降级是否误触发）**：
+
+| consumption 词 | 碰撞短语 | _ci_in | 含 购买→降级 | invest 状态 |
+|---------------|---------|--------|------------|------------|
+| 支付 | 支付宝 / 支付通道 / 支付机构 | True×3 | **True×3** | weak |
+| 服务费 | 服务费率 / 服务费用 | True×2 | **True×2** | weak |
+| 手续费 | 手续费用 | True | **True** | weak |
+| 使用费 | 使用费用 / 使用费率 | True×2 | **True×2** | weak |
+| 消费 | 消费者 / **消费者权益** / 消费品 | True×3 | **True×3** | weak |
+| 购买服务 | 购买服务器 / 购买服务协议 / 购买服务费 | True×3 | **True×3** | weak |
+| 兑换服务 | 兑换服务费 / 兑换服务卡 | True×2 | **True×2** | weak |
+
+**16/16 碰撞短语全部误触发降级** → 影响面**不是「仅 购买服务 一词」，而是整个 consumption_context 词表的系统性缺陷**（子串匹配 + 无词边界）。
+
+**高危特别验证（用户预警的「消费者权益」高频词）**：
+```
+输入（逐字）：用户购买平台代币，我们重视消费者权益，提供透明的服务。
+解析：'消费' ∈ '消费者权益' → cons_hit=True；'购买'∈purchase_set 且 rebut_hit=False
+     → 购买 被降级为 weak，invest 状态=weak
+```
+任何电商/服务类代币文本只要同时出现「购买」与「消费者权益」「支付宝」「消费品」等高频词，都会被**错误降级**。这是真实生产场景（非边角 case）。
+
+**严重性升级**：问题 4 从「代码缺陷（单点）」升级为「**系统性缺陷**」——只要子串匹配 + 无词边界存在，新增任何消费词都可能引入同类碰撞。修复建议：`_ci_in` 对中文改词边界/语义匹配，或移除 `购买服务` 拼接词、消费词改为「消费+抵扣/消费+用途」等约束短语。
+
+### B.3 补强 1：消费降级目标 = weak（设计决策，非能力缺口）
+
+```
+输入（逐字）：用户可购买平台代币用于支付平台内的各项服务费，代币仅作消费抵扣用途。
+解析：'购买'(strong∈purchase_set) → cons_hit=True, rebut_hit=False → 降为 weak
+      invest 状态=weak；其余三要素 unknown → 整体 verdict=insufficient_info
+```
+**降级目标是 weak 而非 absent 的设计理由**（`engine.py:17-22` docstring + factor 级 dispute_note）：代币购买**确实发生**（资金为代币易手），只是主导语义为消费，故保守保留 weak 信号（合规工具倾向 over-flag），而非归零为 absent。若改 absent 需「纯消费且零投资意图」的更严口径。
+**测试锁定**：`tests/test_module_b.py::test_b2_consumption_downgrade_target_is_weak`（通过）——断言 购买 须 `downgraded` 且 `weight=='weak'`、invest 状态==weak（非 absent）。
+
+### B.4 补强 2：G-A1 修复双维度护栏（补强2 + 模块A补强3 的完整表达）
+
+G-A1 架构修复必须**同时**约束两个维度，否则引入回归：
+- **维度 1（weight）**：只对 `absent` 指标跳过 negation，避免 B7 的 strong 否定路径被吞。
+- **维度 2（semantics）**：absent 指标内部按 `property / element` 分别处理（呼应模块A补强3 的 6/8 二分）。
+
+4 条路径锁定（`tests/test_module_b.py::TestModuleAGA1TwoDimensionFixGuard`）：
+
+| 路径 | 条件 | 当前行为 | 修复后目标 | 测试现状 |
+|------|------|---------|-----------|---------|
+| A | absent+property(独立使用)+否定语境 | NEGATED → unknown（**G-A1 bug**） | 跳过 negation → absent | `@expectedFailure` |
+| B | absent+element(免费)+否定语境（不免费） | 否定→丢弃，不作 absent 证据 | 不跳过，否定后**不得**产生 absent 证据 | 通过（锁约束） |
+| C | strong+否定语境（无需购买，B7） | NEGATED → absent | 保持现有 negation → absent | 通过（回归护栏） |
+| D | absent+property(独立使用)+无否定 | absent（正确） | 保持 absent | 通过（对照） |
+
+**关键回归护栏**：naive「对所有 absent 跳过 negation」会让路径 B 的「我们不免费」误判 absent（免费），且若泛化到 strong 会破坏路径 C 的 B7（购买被否定→absent 的正确结果翻成 strong）。故修复必须 weight-scoped + semantics-scoped 双约束——印证模块A补强3 的「属性/要素二分」是同一设计的完整表达。
+
+### B.5 补强 3：B5 锁仓=weak 有法律争议（已知法律不确定性，非能力缺口）
+
+```
+输入（逐字）：项目方将代币空投给早期用户，用户需锁仓一定期限后方可交易，项目方承诺按持币比例分配收益。
+解析：'锁仓'(weak) / '空投'(absent) / '收益'(strong)
+      四要素：invest=weak（weak 优先于 absent）, profits=strong, common/efforts unknown → 1/1/0/2 → possibly_security
+```
+`锁仓`/`lock` 当前判 `weak`，**但 SEC 判例对「锁仓单独构成 investment of money」认定并不统一**（多为流动性/vesting 机制，须结合其它对价才可能构成）。故该判定属**存在争议的简化**——性质是**已知法律不确定性，非能力缺口**。报告须给 `锁仓`/`lock` 补 `dispute_note` 标注；当前仅记录未改数据（与 G-A3 形成对照：G-A3 是算力/劳务/流动性对价词**缺失**的真实缺口，B5 是已收录但法律边界模糊的简化判定）。
+
+### B.6 深层共性：purchase_set 硬编码
+
+降级（B.3）与 dual_context（B.1 问题2）两套逻辑都**硬编码在 `purchase_set={购买,buy,purchase}`** 上：
+- `认购/投资/出资` 等同权重的投资词既不享受消费降级保护（B4 中 `出资` 直接 strong），也**不获 dual_context 标柱**（B3 认购不标）。
+- 这是模块 B 最该记的架构性观察：消费降级与双语境检测应基于「投资资金要素的语义」而非「购买」字面，否则以 `认购/投资/出资` 表述的双性质代币系统性漏判。
+
+---
+
+
 
 本轮澄清暴露的薄弱环节，与前序「能力缺口伪装成克制 / 验证不充分包装成验证完成 / 新回归包装成已知限制 / 修复引入的回归藏在自测盲区」同源，属**第五模式：边界数据与边界例子未严格自检**。审计报告须内置以下三条红线：
 
@@ -337,4 +434,4 @@ VERDICT = likely_not_security  (规则: strong+weak<=1)
 
 五次均非「恶意做错」，而是 AI 的天然倾向——**倾向于给出「看起来完整」的答案，而非「实际完整」的答案**。本项目通过五轮审计逐步识别并修正了该模式，沉淀为「审计方法学纪律」三条红线（见上节）。这段话本身比任何技术细节更能体现专业深度，建议纳入 README 或博客的「审计方法论」小节。
 
-> 注：以上仅记录，未修改任何代码 / 数据。模块 B–E 待续。
+> 注：以上仅记录，未修改任何代码 / 数据。模块 B 已收口（含两处补强 1/2 与问题4 系统性升级）；模块 C–E 待续。
