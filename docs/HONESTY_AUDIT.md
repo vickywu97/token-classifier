@@ -866,7 +866,33 @@ SG-MAS-003: 若代币仅提供平台内功能访问、商品/服务兑换，不�
 
 **处置（记录不修）**：在问题 4 修复 PR 中，**必须包含「修复后重跑 D.2 的 4 个用例 + D.2.1 的 5 处子串重叠用例」作为回归锁定**（建议新增 `tests/test_module_d_jurisdiction_isolation.py`，覆盖港新预期分歧与跨法域非触发）。本审计仅记录该要求，不实现修复。
 
-逻辑路径隔离（第 3 步）与法理依据核查（第 4 步）待续。
+逻辑路径隔离（第 3 步）已执行（见 §D.3）；法理依据核查（第 4 步）待续。
+
+### D.3 逻辑路径隔离检查（第 3 步）
+
+**方法**：通读 `classify_jurisdiction`（`classifier.py:44-68`）、其调用方 `analyze`（`classifier.py:130-171`）、上游 `judge_jurisdiction`（`engine.py:78-95`）、匹配器 `_ci_in` / `in_negation_context`（`extractor.py:69-73 / 82-103`），逐维度比对 HK 与 SG 的判定路径是否独立、是否共享可变状态。
+
+**逐维度比对**：
+
+| 维度 | 香港 SFC 路径 | 新加坡 MAS 路径 | 是否共享 | 隔离判定 |
+|------|--------------|----------------|---------|---------|
+| 判定函数 | `classify_jurisdiction`（`classifier.py:44-68`） | 同一函数 | **共享同一实现** | 实现共享（非各写一套） |
+| signals 决策树 | `{security,payment,utility,regime}` + 优先级（`classifier.py:50-61`） | 同一决策树 | **共享** | 实现共享 |
+| 匹配管线 | `judge_jurisdiction` → `scan_indicators` → `_ci_in` | 同一管线 | **共享** | 实现共享（子串耦合源，见 D.2.1） |
+| 否定上下文 | `in_negation_context`（`extractor.py:82-103`） | 同一函数 | **共享** | 实现共享 |
+| method 分支 | 默认 `"signal"`（jsonl 无 method 字段） | 默认 `"signal"` | 共享默认 | 均走 signal 路径 |
+| 中间状态 `signals` / `hits` | 每次调用**局部变量**（`classifier.py:45-67`） | 局部变量 | **不共享** | 状态隔离 ✅ |
+| 数据源 | `hk_sfc.jsonl`（3 条） | `sg_mas.jsonl`（3 条） | 不共享 | 数据隔离 ✅ |
+| 跨法域合并 | `jurisdiction_results` 按 key 分存（`HK_SFC`/`SG_MAS`），无合并 | 同 | — | 无交叉 ✅ |
+
+**关键结论（逻辑层）**：
+- **状态隔离 ✅（无交叉污染）**：HK 与 SG 的 `signals` / `hits` 均为 `classify_jurisdiction` 的**局部变量**，每次调用重新创建；`analyze` 把结果按法域 key 分存于 `jurisdiction_results`，**两法域互不读取对方中间状态**。不存在「一法域判定结果泄露到另一法域」的状态污染——这是逻辑层真正的隔离面。
+- **实现共享（非「逻辑真独立」）**：HK 与 SG **共用同一 `classify_jurisdiction` 函数 + 同一 `signals` 决策树 + 同一匹配管线**，并非「各写一套逻辑」。**判定特异性完全来自数据**（各自 jsonl 的 `indicators` / `signal` / `framework`），而非代码分支。故逻辑层**不能称作「真独立」**（那意味着两套独立实现），精确说法是「**实现共享下的状态隔离**」。
+- **耦合点（与 D.2.1 / 问题4 同源）**：两法域指标同走 `_ci_in` 子串匹配器 + `in_negation_context`，故 D.2.1 发现的 **5 处子串重叠**会**同时作用**于港新——这是逻辑层唯一的真耦合，根因是**匹配器级共享**，与 问题4（子串匹配系统性缺陷）同源。修复 问题4（候选 B+C 的匹配器级实现）将同步消除该耦合，无需为港新各写匹配逻辑（与 D.2 结论一致）。
+- **决策树风险**：单一 `classify_jurisdiction` 若有逻辑缺陷（如 verdict 优先级错配），会**同时影响港新**（无法只修一处）。当前决策树（`security>0`→likely_security、`security>0 & utility>0`→mixed、`payment>0 & security==0`→payment_token 等，`classifier.py:50-61`）对两法域均合理，暂无缺陷；但「单一实现」意味着回归必须双法域同测。
+- **对比 EU MiCA**：`classify_mica`（`classifier.py:71-100`）是**独立函数**，说明框架**支持**「不同法域不同逻辑」；HK/SG 只是恰好都落在默认的 signal 方法上。反证：若未来需港新走不同判定逻辑，应在 `method` 字段区分（而非复制函数），当前未区分。
+
+**判定（第 3 步）**：**逻辑层 = 状态隔离 ✅ + 实现共享（非真独立）⏳→ 收敛为「共享实现下的隔离」**。与 质疑4 三层框架一致：数据 / 结构层 ✅、逻辑层（本步）为「实现共享·状态隔离」、结果层 ⚠️ 部分验证通过。法理依据核查（第 4 步）待续。
 
 ---
 
