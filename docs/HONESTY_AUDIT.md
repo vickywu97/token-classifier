@@ -558,8 +558,22 @@ Howey 综合：possibly_security（confidence=low）
 路径：else（strong+weak=2）→ possibly_security
 ```
 
-- **路径**：`增值` 权重=strong，命中 expectation_of_profits。
-- **判定**：**设计决策**。`增值` 作为利润叙事词判 profits=strong 合理（指标级有效）；verdict possibly_security 由 `strong+weak=2` 触发。注意：当 `增值` 为唯一强信号时（如 C7a 同构，仅 1 strong），因 3-unknown 规则 verdict 会落 likely_not_security；此处因叠加 `生态`(weak) 才到 possibly。属**单关键词 strong**，指标级合理、verdict 级受 3-unknown 保护。**轻微标注**（非缺陷）：`增值/收益/升值` 等单关键词 strong 在营销文本中易命中，若其它因子也有弱信号会快速推高 verdict——作为设计观察记录。
+- **代码路径（逐字，补充 3）**：
+  1. 指标定义：`howey_factors.jsonl` 第 3 行（expectation_of_profits）含 `{"pattern": "增值", "weight": "strong"}`。
+  2. 匹配：`scan_indicators`（`extractor.py:146-150`）取 pattern=`增值` → `find_evidence(text, 增值)`（`extractor.py:106-135`）内部走 `_ci_in`（`extractor.py:69-73`）**精确子串匹配** → `增值 in 生态增值` = True → 命中。
+  3. 因子状态：`judge_factor`（`engine.py:57-58`）`has_strong → state=strong`。
+  4. Verdict：`classify_howey`（`classifier.py:16-25`）本例 s/w/u = 1/1/2 → `unknown>=3`? 否（u=2）→ `strong>=3`? 否 → `strong==2 and weak==2`? 否 → `strong+weak<=1`? 否（=2）→ **`else → possibly_security`**。
+- **「3-unknown 保护」是否成立？修正 + 实测证据（补充 3）**：
+  - **修正**：我原报告称「`增值` 为唯一强信号时因 3-unknown 规则 verdict 会落 likely_not_security」——**该表述错误，已撤回**。实测探针 P1（s/w/a/u = 1/0/0/3）→ `classify_howey` 第 16 行 `unknown>=3` **优先于**第 22 行 `strong+weak<=1` 命中 → **insufficient_info**，**不是** likely_not_security。错误原因：两个分支判据不同且 `unknown>=3` 在前，不能混为一谈。
+  - **保护是偶然的，不是设计的**（两条证据）：
+    1. 该保护来自 `unknown>=3 → insufficient_info`（**信息不足兜底**），与「利润预期」无关——它保护的是「任何单因子强信号」，并非专门防止 `增值` 过触发；
+    2. 保护极脆弱：探针 P2（= 本 C6，仅多一个 `生态`(weak)）→ s/w/u = 1/1/2 → `unknown>=3` 失效（u=2）→ `else → possibly_security`。即**只要任一其它因子给出一个 weak，保护立即蒸发**。
+  - 结论：`增值` 是泛词（`生态增值` / `资产增值` / `品牌增值`），单独即可触发 profits=strong；该 strong 与任一其它因子的弱信号叠加就能推高 verdict，而 rubric 中**不存在任何针对「利润预期由泛词触发」的抑制机制**（与 C4/C9 同源：rubric 对利润预期只做计数，不做语义/权重区分）。
+- **判定（升级链）**：由「设计决策」→「设计决策 + 潜在过宽」→ **现定为「设计缺陷性质：泛词 strong 未做语境约束」**（质疑 1 后再升级）。C6 实质不是"可能过宽"（偶发），而是"**一旦非孤立出现，泛词 strong 即直接推动 verdict 升级**"——这正由我在补充 3 揭示的「3-unknown 保护是偶然而非设计、一个 weak 即蒸发」证据所推翻。→ 列入待处理项 **#8（设计复核，严重性=中高）**。
+
+> 探针逐字记录：
+> - P1 `白皮书称持币者可享受资产增值。` → profits=strong，s/w/a/u = 1/0/0/3 → **insufficient_info**（`unknown>=3` 分支）
+> - P2 `白皮书称持币者可享受生态增值。`（= C6）→ common=weak + profits=strong，s/w/a/u = 1/1/0/2 → **possibly_security**（保护蒸发）
 
 #### C7：核心团队 vs 团队 — efforts strong 边界
 
@@ -583,8 +597,16 @@ Howey 综合：insufficient_info（confidence=low）
 路径：unknown>=3 → insufficient_info
 ```
 
-- **路径**：efforts strong 仅在 `核心团队`/`团队开发` 等**连续短语**命中；`团队` 单独（含「分布式团队」）不匹配 → 该因子 unknown。
-- **判定**：**设计决策（潜在漏检）**。这是**方向相反的边界问题**——strong 信号被短语门限卡住，generic「团队」引用漏检。与模块 B 的"过窄"同源（词表/短语硬编码），但此处是**漏判（under-detection）**而非误判。标注为设计观察，优先级低于 C4/C9 的利润预期权重问题，暂不单列清单项。
+- **代码路径（逐字，补充 3）**：
+  1. 指标定义：`howey_factors.jsonl` 第 4 行（efforts_of_others）的 strong 指标为 `团队开发 / 创始人 / 持续运营 / 路线图 / roadmap / 基金会管理 / 核心团队 / ongoing development`——**无裸 `团队`**。
+  2. 匹配（C7b 不命中的原因）：`scan_indicators`（`extractor.py:146-150`）判定的是 **indicator pattern 是否为文本子串**（`_ci_in`，`extractor.py:69-73`）：
+     - `核心团队 in 项目由一个分布式团队负责开发与运营` → **False**（文本只有「分布式团队」）
+     - `团队开发 in 项目由一个分布式团队负责开发与运营` → **False**（`团队` 与 `开发` 被 `负责` 隔开，非连续）
+     - 两个 strong 指标经 `find_evidence` 返回 `None` → `continue`（`extractor.py:151-153`）→ 不进入 `matched`。
+  3. 因子状态：`matched=[]` → `judge_factor`（`engine.py:52-64`）中 `has_strong / has_weak / has_absent / has_negated_strong_weak` 全 False → `else: state=unknown`（`engine.py:63-64`）。
+- **对照（C7a 命中）**：`核心团队 in 项目由核心团队负责开发与运营` → **True** → `_ci_in` 命中 → `has_strong → state=strong`（实测 s/w/a/u = 1/0/0/3）。**差异仅在「pattern 是否连续出现」**，无语义判断。
+- **覆盖度补充（P5 探针）**：`创始团队负责开发并持续运营。` → 虽无 `核心团队`/`团队开发`，但命中 `持续运营`(strong) → efforts=strong。说明 efforts 的漏检**仅在文本只提「团队」而未出现任何 strong 短语时发生**（如 C7b）。故严重性低，但属真实词表覆盖缺口。
+- **判定**：**词表覆盖不全（漏检方向）**，与 G-A3 同类（缺词），但发生在 efforts 要素。单列为待处理项 **#9（处置类型 = 修复代码·补词表，严重性 = 低）**；可与 G-A3 合并为一个「补词表」PR（不同要素、同类操作），二者不互相依赖。
 
 #### C8：同要素 strong + weak + absent 混合 — 状态优先级
 
@@ -642,9 +664,9 @@ C3 的"weak 优先于 absent"规则与 C4 的"2 weak → possibly_security"**不
 | C3 | 空投+锁仓+收益 | invest=weak(压 absent) | possibly_security | 设计决策（blanket 优先级） | 否（结果可辩护） |
 | C4 | 锁仓+社区治理 | 2×weak, **profits=absent** | possibly_security | **设计缺陷：未对利润预期赋 Howey 核心权重** | 否（表象）但 rubric 与 Howey 相悖 |
 | C5 | 生态 单独 | common=weak | insufficient_info | 真克制（泛词未越级 strong） | 否 |
-| C6 | 增值 单独 | profits=strong | possibly_security | 设计决策（单关键词 strong，受 3-unknown 保护） | 否（轻微观察） |
+| C6 | 增值 单独（+生态 weak） | profits=strong | possibly_security | **设计决策 + 潜在过宽**（保护系 `unknown>=3` 偶然产物，一 weak 即蒸发） | 否（但过宽风险 → #8） |
 | C7a | 核心团队 | efforts=strong | insufficient_info | 设计决策 | 否 |
-| C7b | 团队 单独 | efforts=unknown（漏检） | insufficient_info | 设计决策（短语门限漏判） | 否（潜在漏检） |
+| C7b | 团队 单独 | efforts=unknown（漏检） | insufficient_info | **词表覆盖不全**（`核心团队`/`团队开发` 连续短语门限） | 否（但漏检 → #9） |
 | C8 | strong+weak+absent 混合 | invest=strong（强压弱） | insufficient_info | 设计决策（优先级链正确） | 否 |
 | C9 | 3 strong + profits=absent | profits=absent | **likely_security** | **设计缺陷：rubric 无视利润预期 absent** | **是（与 Howey 相悖）** |
 
@@ -652,9 +674,114 @@ C3 的"weak 优先于 absent"规则与 C4 的"2 weak → possibly_security"**不
 > - **C1-C3、C5-C8 无 weak 误判**；weak 的两类来源路径（指标本身 weak / 消费降级）均合理。
 > - **C4 + C9 暴露 rubric 的根本缺陷**：`classify_howey` 仅做四态计数，**未对 Howey 核心要件"expectation of profits"赋特殊权重**。后果：① profits=absent 仍可被其它因子推成 possibly/likely_security（C4/C9）；② 叠加 C3 的 weak>absent 优先级，弱信号被进一步放大（C4 联动）。
 > - 该问题**跨所有代币的判定**，非单案例边界 → 升为「待处理项清单 #7 · 设计复核」。
-> - C7b 的"团队"漏检、C6 的单关键词 strong 灵敏度，作为次要设计观察记录，优先级低于 #7。
+> - **C6（#8）与 C7b（#9）经审计提示由「次要观察」升级为清单项**：#8 与 #7 同源（rubric 对利润预期只计数、不区分语义），方向为「泛词 strong 未抑制」；#9 与 G-A3 同类（词表覆盖不全），方向为漏检。二者均已补足逐字代码路径证据（见各用例）。
+> - **C1-C3、C5、C7a、C8 无问题**；C6/C7b 为设计层面的过宽/漏检风险，非当前 verdict 误判。
+
+### C.10 跨要素泛词扫描（支撑待处理项 #10）
+
+**任务来源**：质疑 2 指出泛词问题跨要素、跨法域普遍存在（C6 `增值` / C5 `生态` 在 Howey 要素内；D1 观察 2 发现 HK `收益权` vs SG `收益` 粒度差异）。本扫描枚举四 Howey 要素全部 strong 指标，标注「单独出现即可触发 strong 且词义泛化」者。
+
+**方法**：`load_libraries()["howey"]` 遍历四要素 `indicators`，筛 `weight=="strong"`，逐条评估词义泛化程度（是否可在非证券语境自然出现）。
+
+**结果 A — 泛词 strong（过宽风险，与 #8 同源）**：
+
+| 要素 | 泛词 strong 指标 | 泛化风险 |
+|------|----------------|---------|
+| investment_of_money | `投资` | "投资自己的技能/时间"等非出资语境亦常见 |
+| common_enterprise | `资金池` | DeFi 流动性池、众筹等非共同企业语境亦出现 |
+| expectation_of_profits | `收益`、`利润`、`增值`、`回报`、`升值` | 营销泛词，单字/词即命中，无语境约束 |
+| efforts_of_others | （无裸泛词；`核心团队`/`持续运营` 尚具体） | 该要素强信号相对具体，泛词风险低 |
+
+**结果 B — 泛词缺失（漏检，与 #9/G-A3 同类，非过宽）**：
+- `团队` 单体不命中（仅 `核心团队`/`团队开发` 连续短语，见 #9）。
+- `生态`（common_enterprise, weak）已正确止于 weak，未越级 strong（C5 验证 ✅）。
+
+**结论**：泛词 strong 集中于 **expectation_of_profits**（`收益/利润/增值/回报/升值`）与部分 **investment_of_money**（`投资`）、**common_enterprise**（`资金池`）。与 #7/#8 同源——rubric 对「利润预期/泛化出资」只计数、不区分语义。建议 #10 与 #7/#8 合并为同一「利润预期/泛词语义约束」设计复核。跨法域侧（HK `收益权` vs SG `收益`）见 D1 观察 2，待 D 收口后统一处理。
 
 ---
+
+---
+
+## 模块 D：港新判定依据来源独立性审计
+
+> 审计对象：`data/jurisdictions/hk_sfc.jsonl`、`data/jurisdictions/sg_mas.jsonl`、`classifier.py:44-68`（`classify_jurisdiction`）、`engine.py:78-95`（`judge_jurisdiction`）。
+> **核心问题**：两个法域的判定**是否真的基于各自监管文件**，还是共用一套逻辑仅改了标签？
+> 纪律：逐字打印、只记录不修；判定分「真独立 / 能力缺口（假独立）/ 设计简化」；分 4 步，已执行第 1 步，第 2–4 步续做（见下）。
+
+### D.1 数据源隔离检查（第 1 步）
+
+**条目数说明**：指令要求「逐条打印前 5 条」，实测 `hk_sfc.jsonl` 与 `sg_mas.jsonl` **各仅 3 条**（非 5 条），故**全部打印**，无截断。
+
+#### HK SFC（3 条）
+
+| id | topic | framework | signal | source_url |
+|----|-------|-----------|--------|------------|
+| HK-SFC-001 | 证券型代币定义 (Security Token, SFO) | 证券及期货条例 (SFO) | security | `https://www.sfc.hk/en/Regulatory-functions/Intermediaries/Virtual-assets` |
+| HK-SFC-002 | 虚拟资产服务提供者发牌 (VASP Licensing) | 打击洗钱条例 (AMLO) | regime | `https://www.sfc.hk/en/Regulatory-functions/Intermediaries/Licensing` |
+| HK-SFC-003 | 实用/功能型代币（非证券） | SFO 除外情形 | utility | `https://www.sfc.hk/en/Regulatory-functions/Intermediaries/Virtual-assets` |
+
+**criteria 逐字**：
+
+```
+HK-SFC-001: 若代币属 SFO 下「证券」定义（包括股份、债权证、集体投资计划权益等），则受 SFO 规管，相关活动须持牌。
+HK-SFC-002: 自 2023-06-01 起，在香港经营虚拟资产交易所服务须向 SFC 申领 VASP 牌照；非证券型虚拟资产亦受此制度规管。
+HK-SFC-003: 若代币仅用于访问平台功能、支付平台内商品或服务，且不赋予股权/债权/收益分配等证券权利，则通常不被认定为 SFO 下证券。
+```
+
+#### SG MAS（3 条）
+
+| id | topic | framework | signal | source_url |
+|----|-------|-----------|--------|------------|
+| SG-MAS-001 | 数字支付代币服务 (DPT) | 支付服务法 (PSA) | payment | `https://www.mas.gov.sg/regulation/payments` |
+| SG-MAS-002 | 证券型代币 (Security Token, SFA) | 证券与期货法 (SFA) | security | `https://www.mas.gov.sg/regulation/capital-markets` |
+| SG-MAS-003 | 实用/功能型代币（非证券） | SFA 除外情形 | utility | `https://www.mas.gov.sg/regulation/capital-markets` |
+
+**criteria 逐字**：
+
+```
+SG-MAS-001: 若代币构成 PSA 下'数字支付代币'（可用于支付商品/服务、作为交易媒介或价值储存），提供相关服务（交易、托管、跨境转账）须持牌。
+SG-MAS-002: 若代币构成 SFA 下'资本市场产品'（如股份、债券、集合投资计划权益），其发行与交易平台须遵守 SFA 并持牌。
+SG-MAS-003: 若代币仅提供平台内功能访问、商品/服务兑换，不赋予股权/债权/收益分配等资本市场产品特征，通常不适用 SFA。
+```
+
+#### 隔离性判定（第 1 步）
+
+| 检查项 | 结果 | 证据 |
+|--------|------|------|
+| 源域隔离（sfc.hk vs mas.gov.sg） | ✅ **数据层真独立** | HK 3/3 → `sfc.hk`；SG 3/3 → `mas.gov.sg`。**零交叉引用**。 |
+| 法域概念隔离（SFO/VATP vs PSA/SFA） | ✅ **无串味** | HK 仅引用 SFO / AMLO(VASP)；SG 仅引用 PSA / SFA。**HK 无一条提及 PSA/SFA/资本市场产品；SG 无一条提及 SFO/VASP/证券及期货条例**。 |
+| criteria 是否各自表述 | ✅ **数据层真独立** | 6 条 criteria 文本各不相同，均锚定本法域法条概念（SFO「证券」/ VASP 牌照 / SFA「资本市场产品」/ PSA「数字支付代币」）。 |
+
+**初步法理核查（第 4 步详查，此处仅记录观察）**：
+- HK-001 以 SFO「证券」定义（股份 / 债权证 / 集体投资计划权益）为据 ✅ 与香港 SFO 附表 1「证券」定义一致。
+- HK-002 将 VASP 发牌归于 **AMLO（打击洗钱条例）而非 SFO** ✅ **法律定性正确**（经独立核验，见观察 4）；但其 `source_url` 为 SFC 通用 Licensing 落地页，**无法印证该定性**（引用溯源缺陷，见观察 4）。
+- SG-001 以 PSA「数字支付代币」为据 ✅；SG-002 以 SFA「资本市场产品」为据 ✅。
+- 初步**未见法理串用**（港用新概念 / 新用港概念均未出现）。
+
+#### 三项观察
+
+- **观察 1（指标重叠，非缺陷）**：HK-001 与 SG-002 的证券类指标高度重叠——`股权 / equity / 债权 / debt / dividend / 投票权` 共 6 词相同。原因是两地证券定义在股份 / 债权 / 集体投资计划上**同源于英美证券法概念**，重叠属**法律概念同源**，而非代码共用（两文件各自维护、无引用关系）。**判定：真独立**。
+- **观察 2（指标粒度差异，值得记录）**：
+  - HK-001 用 `收益权 / profit rights`（窄，须带「权」）；SG-002 用 `收益`（宽，无「权」）→ **SG 的证券信号更易被「收益」二字单独触发**，与 C6「泛词触发 strong」同类问题。
+  - HK-001 含 `股份 / share / 债券 / 集体投资计划 / CIS`；SG-002 含 `证券 / securities`，集体投资写作 `集体投资`（无「计划」）。
+  - HK-003（utility）含 `支付商品 / 会员权益`；SG-003 含 `兑换服务`。
+  - 影响：同一文本在港新可触发不同信号——这正是第 2 步「故意让结论不同」用例的构造依据。
+- **观察 3（结构对称，第 3 步伏笔）**：两文件均为 3 条、均含 security + utility 两类，但**第 3 类不同**：HK 为 `regime`（VASP/AMLO），SG 为 `payment`（DPT/PSA）。signal 词汇**不共享**（HK = {security, regime, utility}；SG = {payment, security, utility}），是独立性的正面证据。但需注意 `classify_jurisdiction`（`classifier.py:44-68`）的 signals 字典**同时容纳 security / payment / utility / regime 四类并共用同一决策树**——该点属第 3 步（逻辑路径隔离）范围，**此处仅标记待查，不下结论**。
+- **观察 4（法律准确性 vs 引用溯源，质疑 4）**：HK-SFC-002 的 `framework=AMLO` 定性**法律正确**，但 `source_url` **无法印证**该定性。
+  - 逐字条目 + source_url：
+    ```
+    HK-SFC-002 | topic: 虚拟资产服务提供者发牌 (VASP Licensing)
+    framework: 打击洗钱条例 (AMLO) | signal: regime
+    criteria: 自 2023-06-01 起，在香港经营虚拟资产交易所服务须向 SFC 申领 VASP 牌照；非证券型虚拟资产亦受此制度规管。
+    indicators: 交易所 / exchange / 交易平台 / trading platform / 虚拟资产服务 / VASP / 托管 / custody / 运营中心 / hong kong
+    source_url: https://www.sfc.hk/en/Regulatory-functions/Intermediaries/Licensing
+    ```
+  - **引用核验结论（标注「待核实」）**：该 `source_url` 经抓取为 **SFC「Licensing」通用落地页**（内容仅述 SFO 持牌人 / 中介人发牌职能），**未含任何 VASP / AMLO / 2023-06-01 字样**，故**不能支撑「VASP 由 AMLO 引入」的定性**。法律事实本身经独立检索（LegCo 文件、SFC 通函 23EC27/23EC28、InvestHK）确认**正确**——HK VASP 制度确由《打击洗钱条例（修订）条例 2022》在第 615 章下增设、2023-06-01 生效、SFC 主责。但数据条目的 `source_url` 是**弱引用（generic landing page）**，应替换为具体 VATP 发牌通函 URL（如 `apps.sfc.hk/edistributionWeb/gateway/TC/circular/doc?refNo=23EC28`）。
+  - **性质**：非法律错误，是**引用溯源缺陷（citation gap）**。不计入 #1–#10 的代码/设计缺口，但属文档可信度问题，建议在条目加「引用待核实」标记，待补强 source_url 后移除。
+
+**判定（第 1 步）**：**数据层真独立 ✅；逻辑层待第 3 步验证**。数据层（源域、概念、criteria 各自表述）已证真独立，无交叉、无法理串用；但 `classify_jurisdiction` 共用 signals 决策树（观察 3 伏笔）是否导致逻辑串味，属第 3 步范围，此处不下结论。3 项观察已记录（指标重叠同源 / 粒度差异 / 结构对称性与第 3 步伏笔）。
+
+> 第 2-4 步（判定结果隔离 / 逻辑路径隔离 / 法理依据核查）已批准执行，见 §D.2–D.4。
 
 ---
 
@@ -662,8 +789,8 @@ C3 的"weak 优先于 absent"规则与 C4 的"2 weak → possibly_security"**不
 
 > 标题区别于「待修复缺口」：本清单含**需改代码**（G-A1、问题 4、G-A3、问题 2/3）与**仅补注释**（B5，非代码缺陷）两类，故用「待处理项」统称。清单按「**测试状态**」分两类，**两类都必须在清单里**——否则读者会误以为「只修那 4 个 `expectedFailure` 就够了」：
 > - **已测试锁定**：**4 个 `expectedFailure`**（`Ran 56 tests ... OK (expected failures=4)`），分属 **2 个代码缺口**（G-A1 ×2、问题 4 ×2）。
-> - **仅记录（无测试锁定）**：**5 项**（G-A3、问题 2、问题 3、B5、C4 利润预期权重）——均为模块 A/B/C 已发现的真实缺口或已知不确定性，只是尚未测试化。
-> 合计 **7 项待处理项**。
+> - **仅记录（无测试锁定）**：**8 项**（G-A3、问题 2、问题 3、B5、C4 利润预期权重、C6 泛词 strong 未做语境约束、C7b 团队漏检、C.10 跨要素泛词扫描）——均为模块 A/B/C 已发现的真实缺口或已知不确定性，只是尚未测试化。
+> 合计 **10 项待处理项**。
 
 | # | 项 | 测试状态 | 处置类型 | 严重性 | 测试 / 记录位置 | 修复 / 标注方向 | 依赖关系 |
 |---|----|---------|---------|--------|----------------|----------------|---------|
@@ -674,6 +801,9 @@ C3 的"weak 优先于 absent"规则与 C4 的"2 weak → possibly_security"**不
 | 5 | **问题 3**：consumption 降级范围过窄（仅绑定 `purchase_set`） | ⚠️ 仅记录（无测试） | 修复代码（重构） | 中 | 文档 §B.1（证据：B2 正确降 weak / B7 无误伤） | 消费降级适用于**全部**投资资金 strong 指标（`认购/投资/出资` 等），而非仅 `purchase_set` | 与问题 2 同源（`purchase_set` 硬编码，§B.6），**应合并重构** |
 | 6 | **B5**：`锁仓`/`lock`=weak 属法律争议简化（**非代码缺陷**） | ⚠️ 仅记录（无测试） | 补注释（非代码） | 中 | 文档 §B.5 | 补 `dispute_note` 标注法律边界（记录不修数据） | 独立 |
 | 7 | **C4（模块 C）**：verdict rubric 未对 Howey 核心要件「expectation of profits」赋特殊权重 | ⚠️ 仅记录（无测试） | 设计复核（非代码修复） | 中高 | 文档 §模块C（C4/C9 用例 + C3/C4 联动） | 在 `classify_howey` 引入「利润预期」阈值约束（如 profits=absent 时封顶 verdict ≤ likely_not_security / 不允许 strong 主导）；并复核 weak>absent 优先级对 verdict 的放大；属**跨所有代币的判定问题，非单案例边界** | 与 C3 的 weak>absent 优先级耦合，应一并审视 |
+| 8 | **C6（模块 C）**：`增值`/`收益`/`利润` 等泛词单独触发 profits=strong，且未做语境约束（非孤立则直接推高 verdict） | ⚠️ 仅记录（无测试） | 设计复核 | 中高 | 文档 §模块C C6（探针 P1/P2）+ §C.10 跨要素泛词扫描 | 复核「泛词 strong」的抑制机制：如给 `增值/升值/收益/利润` 加语境约束（须与「代币/持币/价格」共现），或降为 weak；现行「保护」实为 `unknown>=3` 信息不足兜底，非针对利润预期设计，任一 weak 出现即蒸发 | 与 #7 同源（rubric 对利润预期只计数、不区分语义），**建议与 #7 合并设计复核** |
+| 9 | **C7b（模块 C）**：efforts 要素缺裸 `团队`（仅 `核心团队`/`团队开发` 连续短语命中） | ⚠️ 仅记录（无测试） | 修复代码（补词表） | 低 | 文档 §模块C C7b（探针 P3/P4/P5） | 补 `团队`（weak 或 strong，需定权重）等 efforts 词表；注意 P5 显示 `持续运营` 等其它 strong 通路可部分补救，故仅当文本只提「团队」时漏检 | 与 G-A3 同类（词表覆盖不全，不同要素），**可合并为一个「补词表」PR**，二者不互相依赖 |
+| 10 | **C.10（模块 C）**：跨要素「泛词 strong 未做语境约束」系统性扫描——`投资`/`资金池`/`收益`/`利润`/`增值`/`回报`/`升值` 等单独出现即可触发 strong，词义泛化、易在营销文本误触发 | ⚠️ 仅记录（无测试；扫描见 §C.10） | 设计复核 | 中 | 文档 §C.10 跨要素泛词扫描 | 与 #8 同源，扩大覆盖面：跨四要素统一评估「泛词 strong」抑制机制；可并入 #7/#8 的设计复核 PR | 与 #7/#8 同源（rubric 对利润预期/泛词只计数、不区分语义），**建议并入同一设计复核** |
 
 > **口径说明**：
 > - 4 个 xFail 中 G-A1 占 2（双路径锁定）、问题 4 占 2（双场景锁定），故「4 测试 = 2 代码缺口」，**不等于「只有 2 个缺口」**。
@@ -681,6 +811,11 @@ C3 的"weak 优先于 absent"规则与 C4 的"2 weak → possibly_security"**不
 > - G-A3 虽仅记录，但其危害态 case2b 已证明会真实翻转 verdict（§A3），**优先级仅次于 G-A1**，建议优先补 xFail 锁定。
 > - B5 本质是「已知法律不确定性」而非代码缺陷，列入是为完整呈现「待处理项全貌」（其处置 = 补 `dispute_note`，非改代码）。
 > - **C4（#7）是模块 C 揭示的 rubric 级设计缺陷**：`classify_howey` 仅做四态计数，**不对 Howey 核心要件"expectation of profits"赋特殊权重**，导致 profits=absent 仍可被其它因子推成 possibly/likely_security（C4/C9）。这是**跨所有代币的判定问题，非单案例边界**，且 C3 的 weak>absent 优先级进一步放大该效应——修复时须与 C3 联动审视。
+> - **C6（#8）与 C7b（#9）是 C5-C9 用例产出后补入的两项**（原报告仅作「设计观察」记录，经审计提示后升级为清单项）：
+>   - #8 与 #7 **同源**（rubric 对利润预期只计数、不区分语义），方向相反：#7 是 profits=absent 被无视（应降未降），#8 是 profits=strong 由泛词触发（应抑制未抑制）。二者建议合并设计复核。
+>   - #9 与 G-A3 同类（词表覆盖不全），但发生在 efforts 要素、方向为**漏检**；严重性低（P5 证明 `持续运营` 等其它 strong 通路可部分补救），可与 G-A3 合并为一个「补词表」PR。
+>   - #10 是 #8 的**跨要素扩大版**（系统扫描），与 #7/#8 同源（rubric 对利润预期/泛词只计数、不区分语义），建议并入同一「利润预期/泛词语义约束」设计复核 PR，不与 #9（补词表）混淆。
+> - **本轮一并修正一处我先前写错的表述**：C6 原写「`增值` 为唯一强信号时因 3-unknown 规则落 likely_not_security」——实测为 **insufficient_info**（`unknown>=3` 分支优先于 `strong+weak<=1`）。该错误已撤回并补入探针证据（P1/P2），说明「保护」是信息不足兜底的**偶然产物**而非设计。
 
 本轮澄清暴露的薄弱环节，与前序「能力缺口伪装成克制 / 验证不充分包装成验证完成 / 新回归包装成已知限制 / 修复引入的回归藏在自测盲区」同源，属**第五模式：边界数据与边界例子未严格自检**。审计报告须内置以下三条红线：
 
