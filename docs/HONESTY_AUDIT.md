@@ -441,12 +441,229 @@ G-A1 架构修复必须**同时**约束两个维度，否则引入回归：
 
 
 
+## 模块 C：weak 判定边界 + 其他三要素 strong 核查（C1-C4）
+
+> 审计对象：`engine.py:52-64`（状态优先级 strong>weak>absent>unknown）、`classifier.py:9-25`（`classify_howey` 综合 rubric）。
+> 纪律：逐字打印输入；能力缺口只记录不修；判定分「真克制 / 能力缺口 / 设计决策」；每 4 用例汇报一次（本批 C1-C4）。
+
+### C.0 问题1：所有 weak 判定的来源路径枚举
+
+跑 3 个 demo + 模块 B 的 B2/B4 + C1-C4，共 **12 个 weak 指标命中**，按来源路径分布：
+
+| 来源路径 | 数量 | 明细 |
+|---------|------|------|
+| 指标本身 weight=weak | 9 | 锁仓×3（C1/C3/C4）、生态×2（DEMO-SEC/DEMO-AMB）、兑换（DEMO-AMB）、部分去中心化（DEMO-AMB）、社区治理×2（DEMO-AMB/C4） |
+| strong 被消费降级（B2 路径） | 3 | 购买（B2）、购买（B4）、购买（C2） |
+
+> 注：DEMO-SECURITY 的 `生态`(weak) 命中 common_enterprise，但该因子另有 strong 命中（最终 4/0/0/0），故 `生态` 作为 weak 指标存在但未成为因子状态——**枚举的是 weak 指标命中，非 weak 因子状态**。其余 11 个 weak 指标均成为对应因子状态（或被降级 / 优先级规则处理）。
+
+**结论（问题1）**：weak 判定**全部合理**——9 个来自权重本就为 weak 的指标（锁仓 / 社区治理 / 生态 / 兑换 / 部分去中心化，均为「弱信号」语义），3 个来自消费降级（B2 路径，目标 = weak 是设计决策）。**未发现 weak 误判**。weak 的两种来源路径清晰、可解释。
+
+### C.1-C.4 用例（逐字）
+
+#### C1：纯 weak 指标命中（锁仓）— 验证 weak 不被错误升级
+
+输入（逐字）：`项目方要求用户锁仓代币后方可交易。`
+
+```
+四要素：investment_of_money=weak（锁仓, weight=weak）
+        common_enterprise=unknown / expectation_of_profits=unknown / efforts_of_others=unknown
+四态计数：strong=0 weak=1 absent=0 unknown=3
+Howey 综合：insufficient_info（confidence=low）
+路径：unknown>=3 → insufficient_info
+```
+
+- **路径**：`judge_factor` 命中 `锁仓`(weak) → 该因子 weak；其余三因子无命中 → unknown。
+- **判定**：**真克制 / 设计决策**。weak 指标正确保持 weak，未升级为 strong；verdict 因 3 unknown 落 insufficient_info，对稀疏信号保守正确。无错误升级。✅
+
+#### C2：strong 被消费降级（B2 场景）— 验证降级路径稳定
+
+输入（逐字）：`用户使用人民币购买平台代币，代币用于支付平台内的课程服务费。`
+
+```
+四要素：investment_of_money=weak（购买, DOWNGRADED→weak）
+        common/efforts/profits=unknown
+四态计数：strong=0 weak=1 absent=0 unknown=3
+Howey 综合：insufficient_info
+路径：unknown>=3 → insufficient_info
+```
+
+- **路径**：`购买`(strong) 命中 purchase_set，cons_hit（服务费 / 支付）→ 无 rebut → `downgraded=True`，weight→weak（`engine.py:37-39`）。
+- **判定**：**设计决策**（消费降级目标 = weak，模块 B 已定稿）。降级稳定复现 B2，未误升为 strong。✅
+
+#### C3：空投（weak 优先于 absent）— 验证优先级依据
+
+输入（逐字）：`项目方将代币空投给早期用户，用户需锁仓一定期限后方可交易，项目方承诺按持币比例分配收益。`
+
+```
+四要素：investment_of_money=weak（锁仓 weak + 空投 absent → 优先级取 weak）
+        expectation_of_profits=strong（收益）
+        common/efforts=unknown
+四态计数：strong=1 weak=1 absent=0 unknown=2
+Howey 综合：possibly_security（confidence=low）
+路径：else（strong+weak=2，非 2&2）→ possibly_security
+```
+
+- **路径**：investment_of_money 同场命中 `锁仓`(weak) 与 `空投`(absent)。`engine.py:52-64` 优先级 `has_weak → state=weak`，**absent 被 weak 压过**。docstring 明示："absent 类指标仅在该要素无任何 strong/weak 命中时生效，避免「既购买了又空投」被错误判为 absent"。
+- **判定（C3 重点）：设计决策（有依据，但为 blanket 规则）**。优先级在 `engine.py` 硬编码且文档化，意图是防止「又买又空投」被误判 absent。对 C3（空投 + 锁仓）：锁仓是投资型限制（illiquidity / vesting），判 weak 比 absent 更保守（偏 security），**结果可辩护**。但需注意：该优先级是**因子级 blanket 规则**，非按案情判定——任何 weak 都会压过同因子 absent，即便 weak 是附带信号。本例结果合理，不记为缺陷，但标注为「blanket 优先级，依赖个案复核」。
+- verdict possibly_security 由 `收益`(strong profits) + invest=weak 驱动，合理。
+
+#### C4：多 weak 叠加（锁仓 + 社区治理）— 验证 2 weak 对 verdict 的推动
+
+输入（逐字）：`用户需锁仓代币，项目完全由社区治理，无中心化团队管理。`
+
+```
+四要素：investment_of_money=weak（锁仓）
+        efforts_of_others=weak（社区治理）
+        common_enterprise=unknown / expectation_of_profits=unknown
+四态计数：strong=0 weak=2 absent=0 unknown=2
+Howey 综合：possibly_security（confidence=low）
+路径：else（strong+weak=2，非 2&2）→ possibly_security
+```
+
+- **路径**：`锁仓`(invest weak) + `社区治理`(efforts weak) → 两因子 weak；common / profits unknown。
+- **判定（C4 重点，两层）**：
+  - **第一层（表象）**：2 weak（零 strong）≡ 2 strong → possibly_security。weak 阈值权重偏重（见下「更尖锐的观察」）。
+  - **第二层（根本 · 用户深挖）**：用 **Howey Test** 重析 C4。C4 四要素：investment=weak(锁仓)、common=unknown/absent、**expectation_of_profits=absent（无收益预期）**、efforts=weak(社区治理)。Howey 判据是**四要素同时满足**，且 **"expectation of profits" 是核心要件**——没有利润预期就不构成投资合同。但 rubric 判 **possibly_security**，把「利润预期 absent」的代币判成「可能构成证券」，**与 Howey 法理相悖**。故根本问题是 **rubric 未对 Howey 核心要件（利润预期）赋特殊权重**，而非简单的 weak 权重偏重。
+  - **极端验证（C9，见下）**：investment=strong, common=strong, **profits=absent**, efforts=strong → 按 rubric `strong>=3 → likely_security`；按 Howey：无利润预期 → 不构成投资合同 → 应 **likely_not_security**。**3 strong + profits absent 被判 likely_security，是 rubric 的实质性误判**，比 C4 更尖锐地证明严重性。
+  - **定性变更**：C4 性质从「权重偏重（表象）」升级为「**rubric 未对利润预期赋 Howey 核心权重（根本）**」。属**设计缺陷（设计决策层面）**，非代码 bug；但影响**跨所有代币的判定**，非单案例边界。
+
+### C5-C9 用例（逐字）
+
+#### C5：生态 单独出现（无其他信号）— common 是否过判 strong
+
+输入（逐字）：`该项目构建了一个庞大的生态，用户可在其中使用代币。`
+
+```
+四要素：common_enterprise=weak（生态）
+        investment/common/profits/efforts=unknown
+四态计数：strong=0 weak=1 absent=0 unknown=3
+Howey 综合：insufficient_info（confidence=low）
+路径：unknown>=3 → insufficient_info
+```
+
+- **路径**：`生态` 权重=weak（非 strong），命中 common_enterprise。
+- **判定**：**真克制 / 设计决策**。`生态` 这类泛词**只到 weak，未越级为 strong**，verdict 落 insufficient_info。回答了原问题"会不会把生态这类泛词判 strong"——**不会**。无过判。✅
+
+#### C6：增值 单独出现 — profits 是否过判 strong
+
+输入（逐字）：`白皮书称持币者可享受生态增值。`
+
+```
+四要素：expectation_of_profits=strong（增值）
+        common_enterprise=weak（生态）
+        investment/efforts=unknown
+四态计数：strong=1 weak=1 absent=0 unknown=2
+Howey 综合：possibly_security（confidence=low）
+路径：else（strong+weak=2）→ possibly_security
+```
+
+- **路径**：`增值` 权重=strong，命中 expectation_of_profits。
+- **判定**：**设计决策**。`增值` 作为利润叙事词判 profits=strong 合理（指标级有效）；verdict possibly_security 由 `strong+weak=2` 触发。注意：当 `增值` 为唯一强信号时（如 C7a 同构，仅 1 strong），因 3-unknown 规则 verdict 会落 likely_not_security；此处因叠加 `生态`(weak) 才到 possibly。属**单关键词 strong**，指标级合理、verdict 级受 3-unknown 保护。**轻微标注**（非缺陷）：`增值/收益/升值` 等单关键词 strong 在营销文本中易命中，若其它因子也有弱信号会快速推高 verdict——作为设计观察记录。
+
+#### C7：核心团队 vs 团队 — efforts strong 边界
+
+输入 C7a（逐字）：`项目由核心团队负责开发与运营。`
+
+```
+四要素：efforts_of_others=strong（核心团队）
+        investment/common/profits=unknown
+四态计数：strong=1 weak=0 absent=0 unknown=3
+Howey 综合：insufficient_info（confidence=low）
+路径：unknown>=3 → insufficient_info
+```
+
+输入 C7b（逐字）：`项目由一个分布式团队负责开发与运营。`
+
+```
+四要素：efforts_of_others=unknown（"团队" 未命中 核心团队/团队开发 连续短语）
+        investment/common/profits=unknown
+四态计数：strong=0 weak=0 absent=0 unknown=4
+Howey 综合：insufficient_info（confidence=low）
+路径：unknown>=3 → insufficient_info
+```
+
+- **路径**：efforts strong 仅在 `核心团队`/`团队开发` 等**连续短语**命中；`团队` 单独（含「分布式团队」）不匹配 → 该因子 unknown。
+- **判定**：**设计决策（潜在漏检）**。这是**方向相反的边界问题**——strong 信号被短语门限卡住，generic「团队」引用漏检。与模块 B 的"过窄"同源（词表/短语硬编码），但此处是**漏判（under-detection）**而非误判。标注为设计观察，优先级低于 C4/C9 的利润预期权重问题，暂不单列清单项。
+
+#### C8：同要素 strong + weak + absent 混合 — 状态优先级
+
+输入（逐字）：`用户兑换并质押代币，同时出资认购项目份额。`
+
+```
+四要素：investment_of_money=strong（认购 strong + 出资 strong + 兑换 weak + 质押 weak → 优先级取 strong）
+        common/profits/efforts=unknown
+四态计数：strong=1 weak=0 absent=0 unknown=3（weak 被同因子 strong 压过，不计入状态）
+Howey 综合：insufficient_info（confidence=low）
+路径：unknown>=3 → insufficient_info
+```
+
+- **路径**：`engine.py:57-58` `has_strong → state=strong`，strong 压过同因子 weak/absent。
+- **判定**：**设计决策（优先级链正确）**。strong > weak > absent 的优先级链在此一致生效，混合因子正确取 strong。与 C3 的 weak>absent 同一优先级体系的下端，逻辑自洽。✅
+
+#### C9：极端验证 — investment=strong, common=strong, profits=absent, efforts=strong
+
+输入（逐字）：`由核心团队负责持续运营并发布路线图。用户以人民币认购代币。项目方设立资金池，代币持有者权益按比例分配。项目方不承诺任何收益，也不保证利润。`
+
+```
+四要素：investment_of_money=strong（认购）
+        common_enterprise=strong（资金池 + 按比例分配）
+        expectation_of_profits=absent（收益 / 利润 均被"不"否定）
+        efforts_of_others=strong（持续运营 + 路线图 + 核心团队）
+四态计数：strong=3 weak=0 absent=1 unknown=0
+Howey 综合：likely_security（confidence=high）
+路径：strong>=3 → likely_security
+```
+
+- **路径**：三因子 strong + profits 经 `不承诺收益 / 不保证利润` 否定 → absent。
+- **判定（C4 深挖根本层 · 关键证据）**：**rubric 实质性误判**。
+  - 按 **Howey Test**：投资合同须四要素同时满足，且 **"expectation of profits" 是核心要件**——无利润预期即不构成投资合同。本例明确"不承诺收益、不保证利润"，**应判 likely_not_security（或至少非 security）**。
+  - 按 **当前 rubric**：`strong>=3 → likely_security`，**完全无视 profits=absent**。
+  - 这是 **3 strong + profits absent 被判 likely_security**，比 C4 更尖锐地证明 rubric 缺陷的严重性：**它不对 Howey 核心要件（利润预期）赋任何特殊权重**。
+
+### C3/C4 联动（同一 rubric 的两个侧面）
+
+C3 的"weak 优先于 absent"规则与 C4 的"2 weak → possibly_security"**不是独立问题，是同一 rubric 设计的两个侧面**，且 C3 直接推动 C4 的 verdict 升级：
+
+| 用例 | 输入要点 | investment 状态 | efforts 状态 | verdict |
+|------|---------|----------------|------------|---------|
+| XY-X（无 锁仓） | 空投(absent) + 社区治理(weak) | **absent**（空投） | weak | **likely_not_security**（strong+weak=1） |
+| XY-Y（+锁仓，触发 weak>absent） | 空投 + 锁仓(weak) + 社区治理(weak) | **weak**（锁仓压过空投） | weak | **possibly_security**（2 weak） |
+
+- 两例仅差一个 `锁仓`(weak)。XY-X 中 investment=absent（空投），verdict=likely_not_security；XY-Y 因 C3 的 **weak>absent 规则把 investment 从 absent 抬到 weak**，叠上 efforts=weak 形成 2 weak → verdict 翻转为 possibly_security。
+- **结论**：C3 的优先级规则（absent→weak）是 C4 verdict 升级的输入源；两者耦合。修复利润预期权重问题时，须一并审视 weak>absent 优先级对 verdict 的放大效应。
+
+### 模块 C 阶段结论（C1-C9）
+
+| 用例 | 输入要点 | 关键状态 | verdict | 判定 | 是否误判 |
+|------|---------|---------|---------|------|---------|
+| C1 | 锁仓（单 weak） | invest=weak | insufficient_info | 真克制 | 否 |
+| C2 | 购买+消费词（降级） | invest=weak(downgrade) | insufficient_info | 设计决策 | 否 |
+| C3 | 空投+锁仓+收益 | invest=weak(压 absent) | possibly_security | 设计决策（blanket 优先级） | 否（结果可辩护） |
+| C4 | 锁仓+社区治理 | 2×weak, **profits=absent** | possibly_security | **设计缺陷：未对利润预期赋 Howey 核心权重** | 否（表象）但 rubric 与 Howey 相悖 |
+| C5 | 生态 单独 | common=weak | insufficient_info | 真克制（泛词未越级 strong） | 否 |
+| C6 | 增值 单独 | profits=strong | possibly_security | 设计决策（单关键词 strong，受 3-unknown 保护） | 否（轻微观察） |
+| C7a | 核心团队 | efforts=strong | insufficient_info | 设计决策 | 否 |
+| C7b | 团队 单独 | efforts=unknown（漏检） | insufficient_info | 设计决策（短语门限漏判） | 否（潜在漏检） |
+| C8 | strong+weak+absent 混合 | invest=strong（强压弱） | insufficient_info | 设计决策（优先级链正确） | 否 |
+| C9 | 3 strong + profits=absent | profits=absent | **likely_security** | **设计缺陷：rubric 无视利润预期 absent** | **是（与 Howey 相悖）** |
+
+> 模块 C 结论：
+> - **C1-C3、C5-C8 无 weak 误判**；weak 的两类来源路径（指标本身 weak / 消费降级）均合理。
+> - **C4 + C9 暴露 rubric 的根本缺陷**：`classify_howey` 仅做四态计数，**未对 Howey 核心要件"expectation of profits"赋特殊权重**。后果：① profits=absent 仍可被其它因子推成 possibly/likely_security（C4/C9）；② 叠加 C3 的 weak>absent 优先级，弱信号被进一步放大（C4 联动）。
+> - 该问题**跨所有代币的判定**，非单案例边界 → 升为「待处理项清单 #7 · 设计复核」。
+> - C7b 的"团队"漏检、C6 的单关键词 strong 灵敏度，作为次要设计观察记录，优先级低于 #7。
+
+---
+
+---
+
 ## 待处理项清单（跨模块汇总）
 
 > 标题区别于「待修复缺口」：本清单含**需改代码**（G-A1、问题 4、G-A3、问题 2/3）与**仅补注释**（B5，非代码缺陷）两类，故用「待处理项」统称。清单按「**测试状态**」分两类，**两类都必须在清单里**——否则读者会误以为「只修那 4 个 `expectedFailure` 就够了」：
 > - **已测试锁定**：**4 个 `expectedFailure`**（`Ran 56 tests ... OK (expected failures=4)`），分属 **2 个代码缺口**（G-A1 ×2、问题 4 ×2）。
-> - **仅记录（无测试锁定）**：**4 项**（G-A3、问题 2、问题 3、B5）——均为模块 A/B 已发现的真实缺口或已知不确定性，只是尚未测试化。
-> 合计 **6 项待处理项**。
+> - **仅记录（无测试锁定）**：**5 项**（G-A3、问题 2、问题 3、B5、C4 利润预期权重）——均为模块 A/B/C 已发现的真实缺口或已知不确定性，只是尚未测试化。
+> 合计 **7 项待处理项**。
 
 | # | 项 | 测试状态 | 处置类型 | 严重性 | 测试 / 记录位置 | 修复 / 标注方向 | 依赖关系 |
 |---|----|---------|---------|--------|----------------|----------------|---------|
@@ -456,12 +673,14 @@ G-A1 架构修复必须**同时**约束两个维度，否则引入回归：
 | 4 | **问题 2**：dual_context 触发过窄（词表锁定 `purchase_set`） | ⚠️ 仅记录（无测试） | 修复代码（重构） | 中高 | 文档 §B.1（证据：B3 认购不标 / B3b 购买标） | dual_context 触发从「购买字面」解耦到「投资资金要素语义」——按要素/权重判定，而非 `pattern` 字面匹配 | 与问题 3 同源（`purchase_set` 硬编码，§B.6），**应合并重构** |
 | 5 | **问题 3**：consumption 降级范围过窄（仅绑定 `purchase_set`） | ⚠️ 仅记录（无测试） | 修复代码（重构） | 中 | 文档 §B.1（证据：B2 正确降 weak / B7 无误伤） | 消费降级适用于**全部**投资资金 strong 指标（`认购/投资/出资` 等），而非仅 `purchase_set` | 与问题 2 同源（`purchase_set` 硬编码，§B.6），**应合并重构** |
 | 6 | **B5**：`锁仓`/`lock`=weak 属法律争议简化（**非代码缺陷**） | ⚠️ 仅记录（无测试） | 补注释（非代码） | 中 | 文档 §B.5 | 补 `dispute_note` 标注法律边界（记录不修数据） | 独立 |
+| 7 | **C4（模块 C）**：verdict rubric 未对 Howey 核心要件「expectation of profits」赋特殊权重 | ⚠️ 仅记录（无测试） | 设计复核（非代码修复） | 中高 | 文档 §模块C（C4/C9 用例 + C3/C4 联动） | 在 `classify_howey` 引入「利润预期」阈值约束（如 profits=absent 时封顶 verdict ≤ likely_not_security / 不允许 strong 主导）；并复核 weak>absent 优先级对 verdict 的放大；属**跨所有代币的判定问题，非单案例边界** | 与 C3 的 weak>absent 优先级耦合，应一并审视 |
 
 > **口径说明**：
 > - 4 个 xFail 中 G-A1 占 2（双路径锁定）、问题 4 占 2（双场景锁定），故「4 测试 = 2 代码缺口」，**不等于「只有 2 个缺口」**。
 > - 问题 2 / 问题 3 是模块 B 发现的**真实缺口**（方向为「范围过窄 / 词表锁定」→ **漏判**，与问题 4 的「误降级」→ **误判**方向相反），只是**尚未写测试**，故列入「仅记录」而非略去。二者**共享同一根因**（`purchase_set` 硬编码，§B.6），建议合并为一个重构项，而非分两次修。
 > - G-A3 虽仅记录，但其危害态 case2b 已证明会真实翻转 verdict（§A3），**优先级仅次于 G-A1**，建议优先补 xFail 锁定。
 > - B5 本质是「已知法律不确定性」而非代码缺陷，列入是为完整呈现「待处理项全貌」（其处置 = 补 `dispute_note`，非改代码）。
+> - **C4（#7）是模块 C 揭示的 rubric 级设计缺陷**：`classify_howey` 仅做四态计数，**不对 Howey 核心要件"expectation of profits"赋特殊权重**，导致 profits=absent 仍可被其它因子推成 possibly/likely_security（C4/C9）。这是**跨所有代币的判定问题，非单案例边界**，且 C3 的 weak>absent 优先级进一步放大该效应——修复时须与 C3 联动审视。
 
 本轮澄清暴露的薄弱环节，与前序「能力缺口伪装成克制 / 验证不充分包装成验证完成 / 新回归包装成已知限制 / 修复引入的回归藏在自测盲区」同源，属**第五模式：边界数据与边界例子未严格自检**。审计报告须内置以下三条红线：
 
@@ -480,6 +699,8 @@ G-A1 架构修复必须**同时**约束两个维度，否则引入回归：
 5. 边界数据和例子未严格自检
 6. **主动性可训练，但系统性整合仍需外部审计**（元观察，待纳入最终 README「元教训」节）。本会话模块 B 相比模块 A 质量明显提升——AI 主动承认了三处定性错误、并自行发现并升级了问题 4 的系统性。但「跨模块待修复清单」这类**整合视角**并未自发产生，仍依赖外部审计提示。**结论**：AI 的**单点自查能力可通过训练提升**，但**跨模块 / 跨会话的系统性整合（缺口全景、依赖关系、优先级）仍必须由外部审计纪律保证**。这一观察比任何技术细节更能说明「AI 辅助合规工具开发需要什么样的审计纪律」，建议作为 README「元教训」节的首条。
 
+7. **单点自查可训练，但根本原因的深挖仍需外部审计引导**（元观察，与 #6 互补，待纳入最终 README「元教训」节）。模块 C 的 C4 由 AI **主动**发现「2 weak ≡ 2 strong」的表象异常，却停在「权重偏重」层，未向「rubric 未对 Howey 核心要件（利润预期）赋特殊权重」深挖——后者需 Howey Test 的法理判断（跨领域专业知识）才能识别。本会话该模式已重复 6–7 次：**AI 倾向于停在「发现异常」层，而「异常背后的法理 / 设计缺陷」需要外部审计以专业判断引导**。与 #6 互补：#6 是「广度」（跨模块整合缺位），本条是「深度」（根因深挖缺位）。两者共同说明——AI 辅助合规工具开发，**单点发现可训练，但根因深挖与系统整合均需人类审计纪律兜底**。
+
 五次均非「恶意做错」，而是 AI 的天然倾向——**倾向于给出「看起来完整」的答案，而非「实际完整」的答案**。本项目通过五轮审计逐步识别并修正了该模式，沉淀为「审计方法学纪律」三条红线（见上节）。这段话本身比任何技术细节更能体现专业深度，建议纳入 README 或博客的「审计方法论」小节。
 
-> 注：以上仅记录，未修改任何代码 / 数据。模块 B 已收口（含两处补强 1/2 与问题4 系统性升级）；模块 C–E 待续。
+> 注：以上仅记录，未修改任何代码 / 数据。模块 B 已收口（含两处补强 1/2 与问题4 系统性升级）；模块 C 已完成（C1-C9 + C4 深挖第二层 + C3/C4 联动 + 待处理项 #7 + 元教训 #7）。模块 D–E 待续。
