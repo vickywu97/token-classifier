@@ -27,7 +27,7 @@ def main(argv=None):
     parser.add_argument("--token-name", "-n", default="未命名代币", help="代币名称（用于报告标题）")
     parser.add_argument(
         "--jurisdictions", "-j", nargs="+", default=VALID_JURISDICTIONS,
-        choices=VALID_JURISDICTIONS, help="要分析的法域（默认港+新）",
+        choices=VALID_JURISDICTIONS, help="要分析的法域（默认四法域全分析：HK_SFC / SG_MAS / US_SEC / EU_MICA）",
     )
     parser.add_argument("--format", choices=["md", "json"], default="md", help="输出格式")
     parser.add_argument("--output", "-o", help="输出到文件（不指定则打印到 stdout）")
